@@ -40,6 +40,7 @@ class POS() :
                 transition_table.loc[samples[1][i], samples[1][i+1]] += 1
         # print(emission_table)
         self.model = HiddenMarkovModel(transition_table, emission_table)
+        # print(train_data[0][0])
         self.model.viterbi(train_data[0][0])
     def test(self,test_data):
         """ Hàm đánh giá model """
