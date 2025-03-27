@@ -38,9 +38,9 @@ class POS() :
                     break
                 
                 transition_table.loc[samples[1][i], samples[1][i+1]] += 1
-        transition_table = transition_table.div(transition_table.sum(axis=0), axis=1)
-        emission_table = emission_table.div(emission_table.sum(axis=0), axis=1)
+        # print(emission_table)
         self.model = HiddenMarkovModel(transition_table, emission_table)
+        self.model.viterbi(train_data[0][0])
     def test(self,test_data):
         """ Hàm đánh giá model """
         print(self.model.viterbi(test_data))
