@@ -15,5 +15,5 @@ class POSDataset():
     """ Class này dùng để load dữ liệu từ Hugging Face """
     def __init__(self):
         dataset = load_dataset("batterydata/pos_tagging")
-        self.train = pd.DataFrame(dataset["train"]).head(2)
-        self.test = pd.DataFrame(dataset["test"]).head(2)
+        self.train = pd.DataFrame(dataset["train"])
+        self.test = pd.DataFrame(dataset["test"])
