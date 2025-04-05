@@ -1,8 +1,13 @@
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 import numpy as np
 import pandas as pd
 from HMM import HiddenMarkovModel
 from dataset import POSDataset
-class POS() : 
+from RNN import CustomRNN
+from tensorflow.keras.preprocessing.text import Tokenizer
+from tensorflow.keras.preprocessing.sequence import pad_sequences
+class POS_HMM() : 
     """ Class chính để thực hiện POS Tagging, gọi HMM model và viterbi """
     def train(self,train_data):
         """ Hàm train HMM model """
@@ -59,9 +64,49 @@ class POS() :
             if list1[i] == list2[i]:
                 same +=1
         return (same,total)
-if __name__ == "__main__":
-    pos = POS()
-    dataset = POSDataset()
-    pos.train(dataset.train)
-    pos.test(dataset.test)
+# if __name__ == "__main__":
+#     pos = POS()
+#     dataset = POSDataset()
+#     pos.train(dataset.train)
+#     pos.test(dataset.test)
     
+    
+class POS_RNN():
+    """ Class chính để thực hiện POS Tagging, gọi RNN model và viterbi """
+    def __init__(self, input_dim, hidden_dim, output_dim):
+        self.input_dim = input_dim
+        self.hidden_dim = hidden_dim
+        self.output_dim = output_dim
+        self.rnn = CustomRNN(input_dim, hidden_dim, output_dim)
+    
+    def train(self, train_data,label):
+        """ Hàm train RNN model """
+        # Chuyển đổi dữ liệu thành định dạng phù hợp với RNN
+        emission_tokenizer = Tokenizer(oov_token="UNK")  # Định nghĩa token đặc biệt
+        emission_tokenizer.fit_on_texts(train_data)
+        X = emission_tokenizer.texts_to_sequences(train_data)
+        X = pad_sequences(X, padding='post')
+        X = np.expand_dims(X,axis=-1)
+        pos_tokenizer = Tokenizer(oov_token="UNK")  # Định nghĩa token đặc biệt
+        pos_tokenizer.fit_on_texts(label)
+        Y = pos_tokenizer.texts_to_sequences(label)
+        Y = pad_sequences(Y, padding='post')
+        Y = np.expand_dims(Y,axis=-1)
+        model = self.rnn(X,Y)
+        
+        
+        
+        
+        
+if __name__ == "__main__":
+    pos = POS_RNN(input_dim=3, hidden_dim=4, output_dim=2)
+    dataset = POSDataset()
+    x = []
+    for sentence in np.array(dataset.train)[:, 0]:
+        x.append(sentence)
+    y = []
+    for sentence in np.array(dataset.train)[:, 1]:
+        y.append(sentence)
+    # print(np.array(dataset.train)[0][0])
+    # print(x)
+    pos.train(x,y)
