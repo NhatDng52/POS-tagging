@@ -1,12 +1,35 @@
 import os
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+# os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 import numpy as np
 import pandas as pd
+import tensorflow as tf
 from HMM import HiddenMarkovModel
 from dataset import POSDataset
 from RNN import CustomRNN
 from tensorflow.keras.preprocessing.text import Tokenizer
 from tensorflow.keras.preprocessing.sequence import pad_sequences
+from tensorflow.keras.utils import to_categorical
+from gensim.models import KeyedVectors
+from gensim.scripts.glove2word2vec import glove2word2vec
+
+gpus = tf.config.list_physical_devices('GPU')
+if gpus:
+    print("GPU devices:", gpus)
+else:
+    print("No GPU available.")
+def convert_sentences_to_embeddings(sentences, word2vec, embedding_dim=100):
+    embedded_sentences = []
+
+    for sentence in sentences:
+        embedded_words = []
+        for word in sentence:
+            if word in word2vec:
+                embedded_words.append(word2vec[word])
+            else:
+                embedded_words.append(np.zeros(embedding_dim))  # từ không có trong word2vec
+        embedded_sentences.append(embedded_words)
+
+    return pad_sequences(embedded_sentences, padding='post', dtype='float32')
 class POS_HMM() : 
     """ Class chính để thực hiện POS Tagging, gọi HMM model và viterbi """
     def train(self,train_data):
@@ -71,35 +94,67 @@ class POS_HMM() :
 #     pos.test(dataset.test)
     
     
+
 class POS_RNN():
-    """ Class chính để thực hiện POS Tagging, gọi RNN model và viterbi """
-    def __init__(self, input_dim, hidden_dim, output_dim):
+    def __init__(self, input_dim, hidden_dim, output_dim, embedding_dim=100):
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
         self.output_dim = output_dim
-        self.rnn = CustomRNN(input_dim, hidden_dim, output_dim)
-    
-    def train(self, train_data,label):
-        """ Hàm train RNN model """
-        # Chuyển đổi dữ liệu thành định dạng phù hợp với RNN
-        emission_tokenizer = Tokenizer(oov_token="UNK")  # Định nghĩa token đặc biệt
-        emission_tokenizer.fit_on_texts(train_data)
-        X = emission_tokenizer.texts_to_sequences(train_data)
-        X = pad_sequences(X, padding='post')
-        X = np.expand_dims(X,axis=-1)
-        pos_tokenizer = Tokenizer(oov_token="UNK")  # Định nghĩa token đặc biệt
-        pos_tokenizer.fit_on_texts(label)
-        Y = pos_tokenizer.texts_to_sequences(label)
-        Y = pad_sequences(Y, padding='post')
-        Y = np.expand_dims(Y,axis=-1)
-        model = self.rnn(X,Y)
-        
-        
-        
-        
-        
+        self.embedding_dim = embedding_dim
+        self.rnn = CustomRNN(embedding_dim, hidden_dim, output_dim)
+
+    def train(self, train_data, label):
+        # Nếu chưa có file word2vec, convert từ glove trước
+        glove_file = 'glove.6B/glove.6B.100d.txt'
+        word2vec_file = 'glove.6B/glove.6B.100d.word2vec.txt'
+        if not os.path.exists(word2vec_file):
+            glove2word2vec(glove_file, word2vec_file)
+
+        # Load vectors
+        self.word2vec = KeyedVectors.load_word2vec_format(word2vec_file, binary=False)
+
+        # Đảm bảo train_data và label là list các list từ
+        train_data = [s if isinstance(s, list) else s.split() for s in train_data]
+        label = [s if isinstance(s, list) else s.split() for s in label]
+
+        # Convert X
+        X = convert_sentences_to_embeddings(train_data, self.word2vec, embedding_dim=self.embedding_dim)
+
+        # Tokenize nhãn và one-hot
+        self.label_tokenizer = Tokenizer(oov_token="UNK")
+        self.label_tokenizer.fit_on_texts(label)
+        Y_seq = self.label_tokenizer.texts_to_sequences(label)
+        Y_seq = pad_sequences(Y_seq, padding='post')
+
+        self.num_labels = len(self.label_tokenizer.word_index) + 1  # +1 vì bắt đầu từ 1
+        Y_onehot = np.array([to_categorical(seq, num_classes=self.num_labels) for seq in Y_seq])
+        print("Y_onehot shape:", Y_onehot.shape)  # shape: (batch, seq_len, num_labels)
+        print("X shape:", X.shape)
+        # Train
+        self.rnn.train_model(X, Y_onehot)
+
+    def test(self, test_data, test_labels):
+        test_data = [s if isinstance(s, list) else s.split() for s in test_data]
+        test_labels = [s if isinstance(s, list) else s.split() for s in test_labels]
+
+        X = convert_sentences_to_embeddings(test_data, self.word2vec, embedding_dim=self.embedding_dim)
+        Y_pred = self.rnn(X).numpy()  # shape: (batch, seq_len, num_labels)
+
+        total = 0
+        correct = 0
+
+        for i in range(len(test_data)):
+            pred_classes = np.argmax(Y_pred[i], axis=-1)
+            true_classes = self.label_tokenizer.texts_to_sequences([test_labels[i]])[0]
+
+            for pred, true in zip(pred_classes, true_classes):
+                if pred == true:
+                    correct += 1
+                total += 1
+
+        print("Accuracy:", correct / total)
 if __name__ == "__main__":
-    pos = POS_RNN(input_dim=3, hidden_dim=4, output_dim=2)
+    pos = POS_RNN(input_dim=1, hidden_dim=4, output_dim=50)
     dataset = POSDataset()
     x = []
     for sentence in np.array(dataset.train)[:, 0]:
@@ -110,3 +165,4 @@ if __name__ == "__main__":
     # print(np.array(dataset.train)[0][0])
     # print(x)
     pos.train(x,y)
+    pos.test(x,y)
