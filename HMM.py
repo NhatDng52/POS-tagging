@@ -54,9 +54,11 @@ class HiddenMarkovModel():
                 
                 compare_label.append(self.emission_prob.columns[label_idx])
 
-            max_prob_idx = np.argmax(compare_list)  
-            
+            max_prob_idx = np.argmax(compare_list) 
+               
+            # print("type compare list",type(compare_list),"compare_list",len(compare_list))
             max_prob = compare_list[max_prob_idx]  
+            
             max_label = compare_label[max_prob_idx]  
             prob = prob * max_prob
             label.append(max_label)
@@ -65,7 +67,9 @@ class HiddenMarkovModel():
         """ Update the unk table based on the most probable label for each word in emission_prob, then concat it to the emission_prob """
         for word in self.emission_prob.index:
             most_probable_label = self.emission_prob.loc[word].idxmax()
-            self.unk.loc['<unk>',most_probable_label ] += 1
-        self.emission_prob = pd.concat([self.emission_prob, self.unk])
+            self.unk.loc['<unk>', most_probable_label] += 1
+
+        # Concatenate and remove duplicate indices by grouping
+        self.emission_prob = pd.concat([self.emission_prob, self.unk]).groupby(level=0).sum()
 
          
